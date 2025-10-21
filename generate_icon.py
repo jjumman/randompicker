@@ -31,10 +31,10 @@ def main():
         'Icon-App-83.5x83.5@2x.png': 167,
         'Icon-App-1024x1024@1x.png': 1024,
     }
-    
+
     base_path = 'ios/Runner/Assets.xcassets/AppIcon.appiconset/'
     source_path = base_path + 'app_icon.png'
-    
+
     # 소스 이미지 로드
     print(f"소스 이미지 로딩 중: {source_path}")
     try:
@@ -46,7 +46,7 @@ def main():
     except Exception as e:
         print(f"❌ 오류: 소스 이미지를 로드할 수 없습니다: {e}")
         return
-    
+
     print("\n앱 아이콘 생성 중...")
     for filename, size in icon_sizes.items():
         print(f"  생성 중: {filename} ({size}x{size})")
@@ -54,7 +54,7 @@ def main():
         # RGB 모드로 변환하여 저장 (iOS 아이콘은 투명도 불필요)
         icon_rgb = icon.convert('RGB')
         icon_rgb.save(base_path + filename, 'PNG')
-    
+
     print(f"\n✅ 총 {len(icon_sizes)}개의 아이콘이 생성되었습니다!")
     print(f"📁 위치: {base_path}")
 
