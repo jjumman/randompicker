@@ -1,83 +1,16 @@
 #!/usr/bin/env python3
 """
 Random Picker 앱 아이콘 생성 스크립트
-다채로운 원들이 있는 앱 아이콘을 생성합니다.
+사용자가 제공한 app_icon.png를 기반으로 모든 크기의 아이콘을 생성합니다.
 """
 
-from PIL import Image, ImageDraw
-import math
+from PIL import Image
+import os
 
-def create_app_icon(size):
-    """지정된 크기의 앱 아이콘 생성"""
-    # 그라데이션 배경 생성
-    img = Image.new('RGB', (size, size), '#1a1a2e')
-    draw = ImageDraw.Draw(img, 'RGBA')
-    
-    # 배경 그라데이션
-    for i in range(size):
-        ratio = i / size
-        r = int(26 + (46 - 26) * ratio)
-        g = int(26 + (46 - 26) * ratio)
-        b = int(46 + (78 - 46) * ratio)
-        draw.line([(0, i), (size, i)], fill=(r, g, b))
-    
-    # 다채로운 원들 그리기
-    colors = [
-        (255, 107, 107, 200),  # 빨강
-        (78, 205, 196, 200),   # 청록
-        (255, 205, 86, 200),   # 노랑
-        (154, 125, 255, 200),  # 보라
-        (255, 159, 243, 200),  # 분홍
-    ]
-    
-    center_x, center_y = size // 2, size // 2
-    
-    # 5개의 원을 원형으로 배치
-    num_circles = 5
-    radius_offset = size * 0.28
-    circle_size = size * 0.15
-    
-    for i in range(num_circles):
-        angle = (2 * math.pi / num_circles) * i - math.pi / 2
-        x = center_x + radius_offset * math.cos(angle)
-        y = center_y + radius_offset * math.sin(angle)
-        
-        color = colors[i % len(colors)]
-        
-        # 외곽 발광 효과
-        for j in range(3, 0, -1):
-            glow_size = circle_size + j * 3
-            glow_color = (*color[:3], int(color[3] * 0.3 * (4 - j) / 3))
-            draw.ellipse(
-                [x - glow_size, y - glow_size, x + glow_size, y + glow_size],
-                fill=glow_color
-            )
-        
-        # 메인 원
-        draw.ellipse(
-            [x - circle_size, y - circle_size, x + circle_size, y + circle_size],
-            fill=color
-        )
-        
-        # 하이라이트
-        highlight_size = circle_size * 0.4
-        highlight_x = x - circle_size * 0.3
-        highlight_y = y - circle_size * 0.3
-        draw.ellipse(
-            [highlight_x - highlight_size, highlight_y - highlight_size,
-             highlight_x + highlight_size, highlight_y + highlight_size],
-            fill=(255, 255, 255, 100)
-        )
-    
-    # 중앙에 작은 흰색 원 (터치 포인트를 상징)
-    center_circle_size = size * 0.08
-    draw.ellipse(
-        [center_x - center_circle_size, center_y - center_circle_size,
-         center_x + center_circle_size, center_y + center_circle_size],
-        fill=(255, 255, 255, 230)
-    )
-    
-    return img
+def resize_icon(source_image, size):
+    """소스 이미지를 지정된 크기로 리사이즈"""
+    # 고품질 리샘플링을 사용하여 리사이즈
+    return source_image.resize((size, size), Image.Resampling.LANCZOS)
 
 def main():
     """모든 필요한 아이콘 크기 생성"""
@@ -100,12 +33,27 @@ def main():
     }
     
     base_path = 'ios/Runner/Assets.xcassets/AppIcon.appiconset/'
+    source_path = base_path + 'app_icon.png'
     
-    print("앱 아이콘 생성 중...")
+    # 소스 이미지 로드
+    print(f"소스 이미지 로딩 중: {source_path}")
+    try:
+        source_image = Image.open(source_path)
+        # RGBA 모드로 변환 (투명도 지원)
+        if source_image.mode != 'RGBA':
+            source_image = source_image.convert('RGBA')
+        print(f"  원본 크기: {source_image.size}")
+    except Exception as e:
+        print(f"❌ 오류: 소스 이미지를 로드할 수 없습니다: {e}")
+        return
+    
+    print("\n앱 아이콘 생성 중...")
     for filename, size in icon_sizes.items():
         print(f"  생성 중: {filename} ({size}x{size})")
-        icon = create_app_icon(size)
-        icon.save(base_path + filename)
+        icon = resize_icon(source_image, size)
+        # RGB 모드로 변환하여 저장 (iOS 아이콘은 투명도 불필요)
+        icon_rgb = icon.convert('RGB')
+        icon_rgb.save(base_path + filename, 'PNG')
     
     print(f"\n✅ 총 {len(icon_sizes)}개의 아이콘이 생성되었습니다!")
     print(f"📁 위치: {base_path}")
