@@ -52,6 +52,7 @@ class _RandomPickerScreenState extends State<RandomPickerScreen>
   Timer? _countdownTimer;
   int? _selectedTouchId;
   bool _isSelecting = false;
+  bool _isRotating = false; // 회전 중인지 구분
   int _countdown = 2;
   final Random _random = Random();
   int _currentRotationIndex = 0;
@@ -84,13 +85,13 @@ class _RandomPickerScreenState extends State<RandomPickerScreen>
   @override
   void initState() {
     super.initState();
-    
+
     // 펄스 애니메이션 (터치 포인트가 살짝 커졌다 작아지는 효과)
     _pulseController = AnimationController(
       duration: const Duration(milliseconds: 1000),
       vsync: this,
     )..repeat(reverse: true);
-    
+
     _pulseAnimation = Tween<double>(begin: 1.0, end: 1.15).animate(
       CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
     );
@@ -100,7 +101,7 @@ class _RandomPickerScreenState extends State<RandomPickerScreen>
       duration: const Duration(milliseconds: 800),
       vsync: this,
     );
-    
+
     _scaleAnimation = Tween<double>(begin: 1.0, end: 2.5).animate(
       CurvedAnimation(parent: _selectionController, curve: Curves.elasticOut),
     );
@@ -120,20 +121,20 @@ class _RandomPickerScreenState extends State<RandomPickerScreen>
     final availableColors = _colorPalette
         .where((color) => !_usedColors.contains(color))
         .toList();
-    
+
     if (availableColors.isEmpty) {
       // 모든 색상을 사용했으면 리셋하고 다시 선택
       _usedColors.clear();
       return _colorPalette[_random.nextInt(_colorPalette.length)];
     }
-    
+
     final selectedColor = availableColors[_random.nextInt(availableColors.length)];
     _usedColors.add(selectedColor);
     return selectedColor;
   }
 
   void _handlePointerDown(PointerDownEvent event) {
-    if (_isSelecting) return;
+    if (_isRotating) return; // 회전 중에는 새로운 터치 불가
 
     setState(() {
       _activeTouches[event.pointer] = TouchPoint(
@@ -148,8 +149,7 @@ class _RandomPickerScreenState extends State<RandomPickerScreen>
   }
 
   void _handlePointerMove(PointerMoveEvent event) {
-    if (_isSelecting) return;
-
+    // 회전 중에도 계속 손가락 따라다니기!
     if (_activeTouches.containsKey(event.pointer)) {
       setState(() {
         _activeTouches[event.pointer] = TouchPoint(
@@ -162,7 +162,12 @@ class _RandomPickerScreenState extends State<RandomPickerScreen>
   }
 
   void _handlePointerUp(PointerUpEvent event) {
-    if (_isSelecting) return;
+    // 회전 중에 손가락을 떼면 마지막 위치에 고정
+    if (_isRotating) {
+      // 원은 유지하되 더 이상 추적하지 않음
+      // 마지막 위치가 이미 _activeTouches에 저장되어 있음
+      return;
+    }
 
     final removedTouch = _activeTouches[event.pointer];
     setState(() {
@@ -178,6 +183,7 @@ class _RandomPickerScreenState extends State<RandomPickerScreen>
       _countdownTimer?.cancel();
       setState(() {
         _countdown = 2;
+        _isSelecting = false;
       });
     } else {
       _resetCountdown();
@@ -202,15 +208,21 @@ class _RandomPickerScreenState extends State<RandomPickerScreen>
 
     setState(() {
       _isSelecting = true;
+      _isRotating = false; // 아직 회전 시작 안함
       _currentRotationIndex = 0;
       _countdown = 0; // 카운트다운 숫자 숨김
     });
 
-    // 햅틱으로만 카운트다운 (3초)
+    // 햅틱으로만 카운트다운 (3초) - 이 동안 손가락 따라다니기 가능!
     for (int i = 0; i < 3; i++) {
       HapticFeedback.heavyImpact(); // 강한 진동
       await Future.delayed(const Duration(seconds: 1));
     }
+
+    // 이제 회전 시작 - 손가락 고정!
+    setState(() {
+      _isRotating = true;
+    });
 
     // 룰렛 회전 효과
     await _startRouletteRotation();
@@ -270,6 +282,7 @@ class _RandomPickerScreenState extends State<RandomPickerScreen>
       _usedColors.clear();
       _selectedTouchId = null;
       _isSelecting = false;
+      _isRotating = false;
       _countdown = 2;
       _currentRotationIndex = 0;
     });
@@ -523,10 +536,10 @@ class TouchPointPainter extends CustomPainter {
       final touch = touches[i];
       final isSelected = touch.id == selectedTouchId;
       final isRotating = isSelecting && !isSelected && i == currentRotationIndex;
-      
+
       // 선택된 것은 크게, 회전 중인 것은 중간, 나머지는 보통
-      final scale = isSelected 
-          ? scaleAnimation.value 
+      final scale = isSelected
+          ? scaleAnimation.value
           : (isRotating ? 1.3 : pulseAnimation.value);
       final baseSize = touch.size * scale;
 
@@ -544,7 +557,7 @@ class TouchPointPainter extends CustomPainter {
         center: touch.position,
         radius: baseSize,
       );
-      
+
       final gradient = RadialGradient(
         colors: [
           touch.color.withOpacity(0.95 * opacity),
@@ -585,7 +598,7 @@ class TouchPointPainter extends CustomPainter {
           ..style = PaintingStyle.stroke
           ..strokeWidth = 5;
         canvas.drawCircle(touch.position, baseSize + 20, ringPaint);
-        
+
         // 추가 외곽 링 (보라색)
         final outerRingPaint = Paint()
           ..color = Color(0xFFE040FB) // 밝은 보라색
