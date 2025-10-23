@@ -53,10 +53,11 @@ class _RandomPickerScreenState extends State<RandomPickerScreen>
   int? _selectedTouchId;
   bool _isSelecting = false;
   bool _isRotating = false; // 회전 중인지 구분
-  int _countdown = 2;
+  int _countdown = 1;
   final Random _random = Random();
   int _currentRotationIndex = 0;
   Timer? _rotationTimer;
+  Timer? _autoResetTimer; // 자동 리셋 타이머
 
   // 화려한 색상 팔레트 (충분히 많은 색상)
   final List<Color> _colorPalette = [
@@ -111,6 +112,7 @@ class _RandomPickerScreenState extends State<RandomPickerScreen>
   void dispose() {
     _countdownTimer?.cancel();
     _rotationTimer?.cancel();
+    _autoResetTimer?.cancel();
     _pulseController.dispose();
     _selectionController.dispose();
     super.dispose();
@@ -162,10 +164,9 @@ class _RandomPickerScreenState extends State<RandomPickerScreen>
   }
 
   void _handlePointerUp(PointerUpEvent event) {
-    // 회전 중에 손가락을 떼면 마지막 위치에 고정
-    if (_isRotating) {
+    // 선택이 진행 중이면 터치 제거를 무시 (회전 방해 방지)
+    if (_isSelecting) {
       // 원은 유지하되 더 이상 추적하지 않음
-      // 마지막 위치가 이미 _activeTouches에 저장되어 있음
       return;
     }
 
@@ -182,8 +183,7 @@ class _RandomPickerScreenState extends State<RandomPickerScreen>
     if (_activeTouches.isEmpty) {
       _countdownTimer?.cancel();
       setState(() {
-        _countdown = 2;
-        _isSelecting = false;
+        _countdown = 1;
       });
     } else {
       _resetCountdown();
@@ -193,10 +193,10 @@ class _RandomPickerScreenState extends State<RandomPickerScreen>
   void _resetCountdown() {
     _countdownTimer?.cancel();
     setState(() {
-      _countdown = 2;
+      _countdown = 1;
     });
 
-    _countdownTimer = Timer(const Duration(seconds: 2), () {
+    _countdownTimer = Timer(const Duration(seconds: 1), () {
       if (_activeTouches.isNotEmpty) {
         _startSelection();
       }
@@ -206,60 +206,64 @@ class _RandomPickerScreenState extends State<RandomPickerScreen>
   void _startSelection() async {
     if (_activeTouches.isEmpty || _isSelecting) return;
 
+    // 이전 자동 리셋 타이머 취소
+    _autoResetTimer?.cancel();
+
     setState(() {
       _isSelecting = true;
-      _isRotating = false; // 아직 회전 시작 안함
+      _isRotating = true; // 바로 회전 시작
       _currentRotationIndex = 0;
       _countdown = 0; // 카운트다운 숫자 숨김
     });
 
-    // 햅틱으로만 카운트다운 (3초) - 이 동안 손가락 따라다니기 가능!
-    for (int i = 0; i < 3; i++) {
-      HapticFeedback.heavyImpact(); // 강한 진동
-      await Future.delayed(const Duration(seconds: 1));
-    }
-
-    // 이제 회전 시작 - 손가락 고정!
-    setState(() {
-      _isRotating = true;
-    });
-
-    // 룰렛 회전 효과
+    // 룰렛 회전 효과 (1.5초)
     await _startRouletteRotation();
+
+    // 리셋되었는지 확인
+    if (!_isSelecting) return;
 
     _selectionController.forward(from: 0.0);
 
-    // 5초 후 리셋
-    await Future.delayed(const Duration(seconds: 5));
-    _reset();
+    // 5초 후 자동 리셋 (타이머 사용)
+    _autoResetTimer = Timer(const Duration(seconds: 5), () {
+      if (_isSelecting) {
+        _reset();
+      }
+    });
   }
 
   Future<void> _startRouletteRotation() async {
     final keys = _activeTouches.keys.toList();
     if (keys.isEmpty) return;
 
-    // 총 회전 횟수와 속도 설정 (회전 시간 증가)
+    // 빠른 회전 (약 1.5초)
     int rotationCount = 0;
-    int maxRotations = 40 + _random.nextInt(15); // 40~55회 회전 (이전: 20~30)
-    int baseDelay = 40; // 기본 딜레이 (밀리초) - 더 빠르게 시작
+    int maxRotations = 20 + _random.nextInt(8); // 20~27회 회전
+    int baseDelay = 25; // 기본 딜레이 (밀리초) - 빠르게 시작
 
     _rotationTimer?.cancel();
 
     while (rotationCount < maxRotations) {
-      // 점점 느려지는 효과 (더 부드럽게)
-      double speedMultiplier = 1.0 + (rotationCount / maxRotations) * 10;
+      // 리셋되었는지 확인
+      if (!_isSelecting || !mounted) return;
+
+      // 점점 느려지는 효과
+      double speedMultiplier = 1.0 + (rotationCount / maxRotations) * 4;
       int currentDelay = (baseDelay * speedMultiplier).round();
 
       setState(() {
         _currentRotationIndex = rotationCount % keys.length;
       });
 
-      // 모든 회전마다 진동 (처음부터 진동 발생)
+      // 모든 회전마다 진동
       HapticFeedback.lightImpact();
 
       await Future.delayed(Duration(milliseconds: currentDelay));
       rotationCount++;
     }
+
+    // 리셋되었는지 확인
+    if (!_isSelecting || !mounted) return;
 
     // 마지막 선택
     final selectedIndex = _random.nextInt(keys.length);
@@ -271,23 +275,29 @@ class _RandomPickerScreenState extends State<RandomPickerScreen>
     // 당첨 진동 (더 강하게)
     HapticFeedback.heavyImpact();
     await Future.delayed(const Duration(milliseconds: 100));
+    if (!_isSelecting || !mounted) return;
     HapticFeedback.heavyImpact();
     await Future.delayed(const Duration(milliseconds: 100));
+    if (!_isSelecting || !mounted) return;
     HapticFeedback.heavyImpact();
   }
 
   void _reset() {
+    // 모든 타이머 취소
+    _countdownTimer?.cancel();
+    _rotationTimer?.cancel();
+    _autoResetTimer?.cancel();
+
     setState(() {
       _activeTouches.clear();
       _usedColors.clear();
       _selectedTouchId = null;
       _isSelecting = false;
       _isRotating = false;
-      _countdown = 2;
+      _countdown = 1;
       _currentRotationIndex = 0;
     });
-    _countdownTimer?.cancel();
-    _rotationTimer?.cancel();
+
     _selectionController.reset();
   }
 
