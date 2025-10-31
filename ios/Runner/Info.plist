@@ -40,6 +40,8 @@
 	<true/>
 	<key>UIMultipleSimultaneousTouch</key>
 	<true/>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>GADApplicationIdentifier</key>
 	<string>ca-app-pub-9825630307332726~8646950277</string>
 	<key>SKAdNetworkItems</key>
