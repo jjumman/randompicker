@@ -2,8 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'dart:math';
 import 'dart:async';
+import 'package:google_mobile_ads/google_mobile_ads.dart';
 
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+  MobileAds.instance.initialize();
   runApp(const MyApp());
 }
 
@@ -19,7 +22,159 @@ class MyApp extends StatelessWidget {
         primarySwatch: Colors.blue,
         useMaterial3: true,
       ),
-      home: const RandomPickerScreen(),
+      home: const SplashScreen(),
+    );
+  }
+}
+
+// 스플래시 스크린 (로딩 페이지)
+class SplashScreen extends StatefulWidget {
+  const SplashScreen({super.key});
+
+  @override
+  State<SplashScreen> createState() => _SplashScreenState();
+}
+
+class _SplashScreenState extends State<SplashScreen> {
+  AppOpenAd? _appOpenAd;
+  bool _isAdLoaded = false;
+  bool _isAdShown = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _initializeApp();
+  }
+
+  Future<void> _initializeApp() async {
+    // 광고 로드 시작
+    _loadAppOpenAd();
+
+    // 최소 3초 대기 (로딩 화면 표시)
+    await Future.delayed(const Duration(seconds: 3));
+
+    // 광고가 로드되었으면 표시, 아니면 바로 메인 화면으로
+    if (_isAdLoaded && !_isAdShown) {
+      _showAppOpenAd();
+    } else {
+      _navigateToMain();
+    }
+  }
+
+  void _loadAppOpenAd() {
+    // 실제 앱 오프닝 광고 ID
+    const String adUnitId = 'ca-app-pub-9825630307332726/4723182983';
+
+    AppOpenAd.load(
+      adUnitId: adUnitId,
+      request: const AdRequest(),
+      adLoadCallback: AppOpenAdLoadCallback(
+        onAdLoaded: (ad) {
+          print('App Open Ad loaded successfully');
+          _appOpenAd = ad;
+          setState(() {
+            _isAdLoaded = true;
+          });
+        },
+        onAdFailedToLoad: (error) {
+          print('App Open Ad failed to load: $error');
+          // 광고 로드 실패 시 3초 후 메인 화면으로
+        },
+      ),
+    );
+  }
+
+  void _showAppOpenAd() {
+    if (_appOpenAd == null || _isAdShown) {
+      _navigateToMain();
+      return;
+    }
+
+    print('Showing App Open Ad');
+    _isAdShown = true;
+
+    _appOpenAd!.fullScreenContentCallback = FullScreenContentCallback(
+      onAdShowedFullScreenContent: (ad) {
+        print('Ad showed full screen content');
+      },
+      onAdDismissedFullScreenContent: (ad) {
+        print('Ad dismissed');
+        ad.dispose();
+        _navigateToMain();
+      },
+      onAdFailedToShowFullScreenContent: (ad, error) {
+        print('Ad failed to show: $error');
+        ad.dispose();
+        _navigateToMain();
+      },
+    );
+
+    _appOpenAd!.show();
+  }
+
+  void _navigateToMain() {
+    if (mounted) {
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (context) => const RandomPickerScreen()),
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    _appOpenAd?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Color(0xFF64B5F6),
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            // 로고 또는 앱 이름
+            Text(
+              'Touch & Pick',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 40,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 3,
+                shadows: [
+                  Shadow(
+                    blurRadius: 15.0,
+                    color: Colors.black26,
+                    offset: Offset(3, 3),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 40),
+            // 로딩 인디케이터
+            CircularProgressIndicator(
+              color: Colors.white,
+              strokeWidth: 3,
+            ),
+            const SizedBox(height: 20),
+            Text(
+              'Loading...',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 18,
+                shadows: [
+                  Shadow(
+                    blurRadius: 5.0,
+                    color: Colors.black26,
+                    offset: Offset(1, 1),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -339,7 +494,7 @@ class _RandomPickerScreenState extends State<RandomPickerScreen>
               child: Column(
                 children: [
                   Text(
-                    'Random Picker',
+                    'Touch & Pick',
                     style: TextStyle(
                       color: Colors.white,
                       fontSize: 28,
@@ -357,7 +512,7 @@ class _RandomPickerScreenState extends State<RandomPickerScreen>
                   const SizedBox(height: 10),
                   if (_activeTouches.isEmpty && !_isSelecting)
                     Text(
-                      '화면을 터치하세요',
+                      'Touch the screen',
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         color: Colors.white,
@@ -373,7 +528,7 @@ class _RandomPickerScreenState extends State<RandomPickerScreen>
                     )
                   else if (_countdown > 0 && !_isSelecting)
                     Text(
-                      '${_activeTouches.length}명 참여 중... (${_countdown}초)',
+                      '${_activeTouches.length} players... (${_countdown}s)',
                       style: TextStyle(
                         color: Colors.white,
                         fontSize: 18,
@@ -389,7 +544,7 @@ class _RandomPickerScreenState extends State<RandomPickerScreen>
                     )
                   else if (_isSelecting && _countdown == 0 && _selectedTouchId == null)
                     Text(
-                      '선택 중...',
+                      'Selecting...',
                       style: TextStyle(
                         color: Colors.white,
                         fontSize: 24,
@@ -407,7 +562,7 @@ class _RandomPickerScreenState extends State<RandomPickerScreen>
                     Column(
                       children: [
                         const Text(
-                          '🎉 당첨! 🎉',
+                          '🎉 Winner! 🎉',
                           style: TextStyle(
                             color: Colors.white,
                             fontSize: 32,
@@ -423,7 +578,7 @@ class _RandomPickerScreenState extends State<RandomPickerScreen>
                         ),
                         const SizedBox(height: 10),
                         Text(
-                          '${_activeTouches.length}명 중 선택됨',
+                          'Selected from ${_activeTouches.length} players',
                           style: TextStyle(
                             color: Colors.white,
                             fontSize: 16,
@@ -440,7 +595,7 @@ class _RandomPickerScreenState extends State<RandomPickerScreen>
                     )
                   else if (_isSelecting && _countdown == 0)
                     Text(
-                      '선택 중...',
+                      'Selecting...',
                       style: TextStyle(
                         color: Colors.white,
                         fontSize: 24,
@@ -478,7 +633,7 @@ class _RandomPickerScreenState extends State<RandomPickerScreen>
                       ),
                     ),
                     child: const Text(
-                      '다시 하기',
+                      'Try Again',
                       style: TextStyle(
                         color: Colors.black,
                         fontSize: 18,
@@ -506,7 +661,7 @@ class _RandomPickerScreenState extends State<RandomPickerScreen>
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: Text(
-                      '참여자: ${_activeTouches.length}명',
+                      'Players: ${_activeTouches.length}',
                       style: const TextStyle(
                         color: Colors.white,
                         fontSize: 16,
